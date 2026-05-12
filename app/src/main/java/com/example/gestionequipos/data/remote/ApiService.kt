@@ -1,9 +1,9 @@
 package com.example.gestionequipos.data.remote
 
+import com.example.gestionequipos.data.local.Entity.EquipoEntity
 import com.example.gestionequipos.data.model.Equipo
 import com.example.gestionequipos.data.model.Estacion
 import com.example.gestionequipos.data.model.Usuario
-import com.example.gestionequipos.data.model.TipoEquipo
 import retrofit2.http.*
 
 interface ApiService {
@@ -57,4 +57,7 @@ interface ApiService {
     suspend fun eliminarEstacion(
         @Path("estacion_id") estacionId: Int
     ): retrofit2.Response<Unit> // Usamos Response<Unit> para el status 204 No Content
+
+    fun insertarEquipo(equipo: EquipoEntity)
+
 }

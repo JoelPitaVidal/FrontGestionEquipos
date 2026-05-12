@@ -1,20 +1,20 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.example.gestionequipos"
-    // He ajustado a 35 que es la estable actual para evitar errores de pre-release
-    compileSdk = 36
+    compileSdk = 36  // ✅ Actualizado de 35 a 36
 
     defaultConfig {
         applicationId = "com.example.gestionequipos"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35  // Puedes dejarlo en 35
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -33,11 +33,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
     buildFeatures {
         compose = true
     }
 
-    // BLOQUE PARA CORREGIR LOS ERRORES DE META-INF (Netty, Google Auth, etc.)
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -50,25 +53,31 @@ android {
 }
 
 dependencies {
-    // Retrofit para conectar con tu API de Python (equipos.py)
+    // Room
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
+
+    // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
-    // ViewModel y LiveData
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+    // Lifecycle
+    val lifecycle_version = "2.8.7"
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycle_version")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version")
 
-    // Escáner de Google ML Kit para leer el código del monitor
+    // Camera & Scanner
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
     implementation("androidx.camera:camera-camera2:1.3.1")
     implementation("androidx.camera:camera-lifecycle:1.3.1")
     implementation("androidx.camera:camera-view:1.3.1")
 
-    // Compose y Core
+    // Compose (usando catálogo)
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -76,13 +85,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
