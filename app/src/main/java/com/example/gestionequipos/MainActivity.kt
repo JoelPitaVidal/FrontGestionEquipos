@@ -8,29 +8,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.example.gestionequipos.data.local.AppDatabase
-import com.example.gestionequipos.data.local.Entity.EquipoEntity
-import com.example.gestionequipos.ui.screens.HomeScreen
-import com.example.gestionequipos.ui.screens.RegistroEquipoScreen
-import com.example.gestionequipos.ui.screens.ScannerScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gestionequipos.ui.screens.*
 import com.example.gestionequipos.ui.viewmodel.EquipoViewModel
+import com.example.gestionequipos.data.remote.RetrofitClient
+import com.example.gestionequipos.data.repository.EquipoRepository
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val database = AppDatabase.getDatabase(this)
-        val dao = database.equipoDao()
-        val viewModel = EquipoViewModel(dao)
-
         setContent {
+            val apiService = RetrofitClient.apiService
+// 1. Creamos el repositorio
+            val repository = EquipoRepository(apiService)
+// 2. Pasamos el repositorio al ViewModel
+            val viewModel: EquipoViewModel = viewModel { EquipoViewModel(repository) }
+
             MainNavigation(viewModel)
         }
     }
@@ -41,129 +39,64 @@ fun MainNavigation(viewModel: EquipoViewModel) {
     var currentScreen by remember { mutableStateOf("home") }
     val context = LocalContext.current
 
-    // ✅ Estado para manejar permisos
+    // Estado del permiso de cámara
     var hasCameraPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
-    var showPermissionDialog by remember { mutableStateOf(false) }
-    var permissionDeniedPermanently by remember { mutableStateOf(false) }
 
-    // ✅ Launcher para solicitar permiso de cámara
+    // ID del equipo: null para Registro Manual, valor Int para escaneo QR
+    var idDetectado by remember { mutableStateOf<Int?>(null) }
+
+    // Lanzador para solicitar permisos de cámara en tiempo real
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasCameraPermission = isGranted
         if (isGranted) {
-            // Permiso concedido, navegar al scanner
             currentScreen = "scanner"
         } else {
-            // Permiso denegado
-            permissionDeniedPermanently = true
-            showPermissionDialog = true
+            Toast.makeText(context, "Permiso denegado: no se puede usar el escáner", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Variables temporales para el QR
-    var idDetectado by remember { mutableIntStateOf(0) }
-    var numeroDetectado by remember { mutableStateOf("") }
-
-    // ✅ Diálogo para cuando el permiso es denegado
-    if (showPermissionDialog) {
-        AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
-            title = { Text("Permiso de Cámara Requerido") },
-            text = {
-                Text(
-                    if (permissionDeniedPermanently) {
-                        "La cámara es necesaria para escanear códigos QR. " +
-                                "Por favor, habilita el permiso manualmente en Configuración > Aplicaciones > Gestión de Equipos > Permisos."
-                    } else {
-                        "Esta aplicación necesita acceso a la cámara para escanear códigos QR."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showPermissionDialog = false
-                    if (!permissionDeniedPermanently) {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                }) {
-                    Text("Aceptar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showPermissionDialog = false
-                    currentScreen = "home"
-                }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-
+    // GESTIÓN DE NAVEGACIÓN
     when (currentScreen) {
         "home" -> HomeScreen(
+            viewModel = viewModel,
             onScanClick = {
-                // ✅ Verificar permiso antes de navegar
-                if (hasCameraPermission) {
-                    currentScreen = "scanner"
-                } else {
-                    // Solicitar permiso
-                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                }
+                if (hasCameraPermission) currentScreen = "scanner"
+                else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             },
             onViewClick = {
-                Toast.makeText(context, "Función no implementada", Toast.LENGTH_SHORT).show()
+                idDetectado = null // Limpiamos ID para que sea registro manual
+                currentScreen = "formulario"
             },
             onEditClick = {
-                Toast.makeText(context, "Función no implementada", Toast.LENGTH_SHORT).show()
-            },
-            viewModel = viewModel
+                currentScreen = "lista_equipos" // Navega a la lista que acabas de crear
+            }
         )
 
-        "scanner" -> {
-            // ✅ Doble verificación por seguridad
-            if (hasCameraPermission) {
-                ScannerScreen(
-                    onCodeScanned = { codigo ->
-                        // Procesar EQ-A00-0000223 -> numero: 0000223, id: 223
-                        val numero = codigo.substringAfterLast('-')
-                        val id = numero.toIntOrNull() ?: 0
-
-                        idDetectado = id
-                        numeroDetectado = numero
-                        currentScreen = "formulario"
-                    },
-                    onBackPressed = {
-                        currentScreen = "home"
-                    }
-                )
-            } else {
-                // Si de alguna forma llegamos aquí sin permiso, volver al home
-                LaunchedEffect(Unit) {
-                    currentScreen = "home"
-                    Toast.makeText(context, "Permiso de cámara no concedido", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        "formulario" -> RegistroEquipoScreen(
-            idEscaneado = idDetectado,
-            numeroEscaneado = numeroDetectado,
-            onGuardarClick = { equipo: EquipoEntity ->
-                viewModel.guardarEquipoLocal(equipo) {
-                    currentScreen = "home"
-                    Toast.makeText(context, "Guardado en Local", Toast.LENGTH_SHORT).show()
-                }
+        "scanner" -> ScannerScreen(
+            onCodeScanned = { codigo ->
+                // Extrae el número final después del último guion
+                val numeroString = codigo.substringAfterLast('-')
+                idDetectado = numeroString.toIntOrNull()
+                currentScreen = "formulario"
             },
-            onCancelar = { currentScreen = "home" }
+            onBackPressed = { currentScreen = "home" }
+        )
+
+        "formulario" -> EquipoFormScreen(
+            idDetectado = idDetectado,
+            viewModel = viewModel,
+            onBack = { currentScreen = "home" }
+        )
+
+        "lista_equipos" -> ListaEquiposScreen(
+            viewModel = viewModel,
+            onBack = { currentScreen = "home" }
         )
     }
 }
